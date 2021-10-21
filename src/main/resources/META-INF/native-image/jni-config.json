@@ -1,0 +1,34 @@
+[
+{
+  "name":"com.fazecast.jSerialComm.SerialPort",
+  "fields":[
+    {"name":"baudRate"}, 
+    {"name":"comPort"}, 
+    {"name":"dataBits"}, 
+    {"name":"disableConfig"}, 
+    {"name":"eventFlags"}, 
+    {"name":"eventListenerRunning"}, 
+    {"name":"flowControl"}, 
+    {"name":"friendlyName"}, 
+    {"name":"isDtrEnabled"}, 
+    {"name":"isRtsEnabled"}, 
+    {"name":"parity"}, 
+    {"name":"portDescription"}, 
+    {"name":"portHandle"}, 
+    {"name":"readTimeout"}, 
+    {"name":"receiveDeviceQueueSize"}, 
+    {"name":"rs485ActiveHigh"}, 
+    {"name":"rs485DelayAfter"}, 
+    {"name":"rs485DelayBefore"}, 
+    {"name":"rs485Mode"}, 
+    {"name":"sendDeviceQueueSize"}, 
+    {"name":"stopBits"}, 
+    {"name":"timeoutMode"}, 
+    {"name":"writeTimeout"}
+  ],
+  "methods":[{"name":"<init>","parameterTypes":[] }]
+},
+{
+  "name":"com.fazecast.jSerialComm.SerialPort[]"
+}
+]
