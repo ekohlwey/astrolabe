@@ -8,7 +8,7 @@ import java.util.concurrent.Callable
 import kotlin.jvm.JvmStatic
 import kotlin.system.exitProcess
 
-@Command(name = "a7e", subcommands = [ListPorts::class], mixinStandardHelpOptions = true)
+@Command(name = "a7e", subcommands = [ListPorts::class, ConnectDevice::class], mixinStandardHelpOptions = true)
 object Astrolabe {
 
     object AllowedLoggingValues : Iterable<String> {
