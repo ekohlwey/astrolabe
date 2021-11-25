@@ -1,7 +1,7 @@
 package com.github.ekohlwey.astrolabe
 
 enum class StreamAngleMode {
-    STREAM,
-    SILENT;
+    stream,
+    silent;
     companion object
 }

@@ -1,66 +1,49 @@
-package com.github.ekohlwey.astrolabe
+package com.github.ekohlwey.astrolabe.devices
 
+import com.github.ekohlwey.astrolabe.HostMessage
+import com.github.ekohlwey.astrolabe.HostMessage.HostMessageParseError
+import com.github.ekohlwey.astrolabe.HostMessage.SuccessfulParse
+import com.github.ekohlwey.astrolabe.PLUGIN_TODO
 import com.github.ekohlwey.astrolabe.messages.DeviceMessage
 import com.github.ekohlwey.astrolabe.messages.DeviceMessage.*
-import com.github.h0tk3y.betterParse.parser.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.receiveAsFlow
-import java.io.InputStream
-import java.io.OutputStream
-import java.io.PrintWriter
-import java.io.Reader
+import mu.KotlinLogging
+import java.io.*
 
-class Console(private val consoleIn: Reader, private val consoleOut: PrintWriter) : AutoCloseable {
+class Console(private val consoleIn: Reader, private val consoleOut: PrintStream) : AutoCloseable {
 
-    private fun PrintWriter.bell() = this.print('\u0007')
-    private fun PrintWriter.backspace() {
+    private fun PrintStream.bell() = this.print('\u0007')
+    private fun PrintStream.backspace() {
         this.append('\b')
         this.append(' ')
         this.append('\b')
     }
+
     private val sentMessages = Channel<HostMessage>()
     private var currentUserLine = StringBuilder()
-    private val inputSequece = sequence {
-        while (true) {
-            val inChar = runCatching {
-                runBlocking(Dispatchers.IO) { consoleIn.read().toChar() }
-            }.getOrNull() ?: break
-            yield(inChar)
+
+    private fun readNextChar(): Char? {
+        val readChar = consoleIn.read()
+        return if (readChar > -1) {
+            readChar.toChar()
+        } else {
+            null
         }
     }
 
     val messages: Flow<HostMessage> = sentMessages.receiveAsFlow()
 
-    private suspend fun startReading() {
-        withContext(Dispatchers.Default) {
-            launch { inputSequece.forEach { readIncomingConsole(it) } }
-        }
-    }
-
-    private fun printUserErrorHelp(errorResult: ErrorResult, indent: Int) {
-        repeat(indent) { consoleOut.append(' ') }
-        when (errorResult) {
-            is AlternativesFailure -> {
-                consoleOut.appendLine("Tried several alternatives, each resulted in an error:")
-                errorResult.errors.forEach { printUserErrorHelp(it, indent + 2) }
-            }
-            is UnparsedRemainder -> {
-                consoleOut.appendLine("${errorResult.startsWith.text} was unexpected. The text before this is already a complete command.")
-            }
-            is NoMatchingToken -> {
-                consoleOut.appendLine("${errorResult.tokenMismatch.text} was unexpected. It is not part of a command.")
-            }
-            is MismatchedToken -> {
-                consoleOut.appendLine("Expected a ${errorResult.expected.name}, but found ${errorResult.found.text} instead.")
-            }
-            is UnexpectedEof -> {
-                consoleOut.appendLine("Incomplete command. Looking for a ${errorResult.expected.name} next.")
+    suspend fun startReading() {
+        withContext(Dispatchers.IO) {
+            while (true) {
+                val inChar = readNextChar() ?: break
+                readIncomingConsole(inChar)
             }
         }
-        consoleOut.flush()
     }
 
     private suspend fun readIncomingConsole(inChar: Char) {
@@ -94,27 +77,31 @@ class Console(private val consoleIn: Reader, private val consoleOut: PrintWriter
 
     private suspend fun suggestToUser() {
         when (val parseResult = HostMessage.tryParseToEnd(currentUserLine)) {
-            is Parsed -> doIo { consoleOut.bell() }
-            is ErrorResult -> doIo {
+            is SuccessfulParse -> doIo { consoleOut.bell() }
+            is HostMessageParseError -> doIo {
                 consoleOut.appendLine()
-                printUserErrorHelp(parseResult, 0)
+                parseResult.printHelp(consoleOut)
                 consoleOut.appendLine(currentUserLine)
             }
+            else -> PLUGIN_TODO
         }
     }
 
     private suspend fun handleUserInput() {
         doIo {
             consoleOut.appendLine()
-            currentUserLine.clear()
         }
         when (val parseResult = HostMessage.tryParseToEnd(currentUserLine)) {
-            is Parsed -> sentMessages.send(parseResult.value)
-            is ErrorResult -> doIo {
+            is SuccessfulParse -> sentMessages.send(parseResult.hostMessage)
+            is HostMessageParseError -> doIo {
                 consoleOut.bell()
                 consoleOut.appendLine()
-                printUserErrorHelp(parseResult, 0)
+                parseResult.printHelp(consoleOut)
             }
+            else -> PLUGIN_TODO
+        }
+        doIo {
+            currentUserLine.clear()
         }
     }
 
@@ -123,16 +110,15 @@ class Console(private val consoleIn: Reader, private val consoleOut: PrintWriter
         consoleOut.close()
     }
 
-    fun writeDeviceMessages(messages: Flow<DeviceMessage>) : Job =
-        runBlocking {
-            launch {
-                messages.collect { processMessage(it) }
-            }
-        }
+    suspend fun writeDeviceMessages(messages: Flow<DeviceMessage>) {
+        logger.debug { "Processing device messages" }
+        messages.collect { processMessage(it) }
+    }
 
     private suspend fun processMessage(deviceMessage: DeviceMessage) {
+        logger.trace { "Incoming device message: $deviceMessage" }
         doIo {
-            when(deviceMessage) {
+            when (deviceMessage) {
                 is DeviceCalibrate -> consoleOut.println("calibrate = ${deviceMessage.calibrate}")
                 is DeviceKp -> consoleOut.println("kp = ${deviceMessage.kp}")
                 is DeviceKi -> consoleOut.println("ki = ${deviceMessage.ki}")
@@ -152,15 +138,8 @@ class Console(private val consoleIn: Reader, private val consoleOut: PrintWriter
     }
 
     companion object {
-        fun open(consoleIn: InputStream, consoleOut: OutputStream):Console {
-            val console = Console(consoleIn.reader(), PrintWriter(consoleOut))
-            runBlocking {
-                launch {
-                    console.startReading()
-                }
-            }
-            return console
-        }
+        private val logger = KotlinLogging.logger { }
+
     }
 
 }

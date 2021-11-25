@@ -1,22 +1,27 @@
 package com.github.ekohlwey.astrolabe.devices
 
 import com.github.ekohlwey.astrolabe.*
-import com.github.ekohlwey.astrolabe.Direction.*
+import com.github.ekohlwey.astrolabe.Direction.backward
+import com.github.ekohlwey.astrolabe.Direction.forward
 import com.github.ekohlwey.astrolabe.HostMessage.*
 import com.github.ekohlwey.astrolabe.HostMessage.Command.*
 import com.github.ekohlwey.astrolabe.HostMessage.GetParameter.*
 import com.github.ekohlwey.astrolabe.HostMessage.ReadValue.*
 import com.github.ekohlwey.astrolabe.HostMessage.SetParameter.*
-import com.github.ekohlwey.astrolabe.PLUGIN_TODO
-import com.github.ekohlwey.astrolabe.StreamAngleMode.*
+import com.github.ekohlwey.astrolabe.StreamAngleMode.silent
+import com.github.ekohlwey.astrolabe.StreamAngleMode.stream
 import com.github.ekohlwey.astrolabe.messages.*
 import com.github.ekohlwey.astrolabe.messages.DeviceMessage.*
-import com.github.ekohlwey.astrolabe.messages.EnableMode.*
-import com.github.ekohlwey.astrolabe.messages.FeedbackMode.*
+import com.github.ekohlwey.astrolabe.messages.EnableMode.disabled
+import com.github.ekohlwey.astrolabe.messages.EnableMode.enabled
+import com.github.ekohlwey.astrolabe.messages.FeedbackMode.CLOSELOOP
+import com.github.ekohlwey.astrolabe.messages.FeedbackMode.OPENLOOP
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.runBlocking
+import mu.KotlinLogging
 import java.util.*
 import kotlin.concurrent.timerTask
 
@@ -27,18 +32,17 @@ class SimulatedDevice(private var initialState: DeviceState) : Device {
     override val messages = internalMessages.receiveAsFlow()
     private var deviceState = initialState
 
-    override fun writeHostMessages(hostMessages: Flow<HostMessage>) =
-        runBlocking {
-            launch {
-                hostMessages.collect { hostMessage -> processMessage(hostMessage) }
-            }
-        }
+    override suspend fun writeHostMessages(hostMessages: Flow<HostMessage>) {
+        logger.debug { "Processing host messages" }
+        hostMessages.collect { hostMessage -> processMessage(hostMessage) }
+    }
 
     override fun close() {
         reportTimer.cancel()
     }
 
     private suspend fun processMessage(hostMessage: HostMessage) {
+        logger.trace { "Host message received: $hostMessage" }
         when (hostMessage) {
             is ReadValue -> {
                 when (hostMessage) {
@@ -56,6 +60,7 @@ class SimulatedDevice(private var initialState: DeviceState) : Device {
                     is GetPidKd -> internalMessages.send(DeviceKd(deviceState.kd))
                     is GetCurrent -> internalMessages.send(DeviceCurrent(deviceState.current))
                     is GetStepSize -> internalMessages.send(DeviceStepSize(deviceState.stepSize))
+                    is GetMotorDir -> internalMessages.send(DeviceMotorDir(deviceState.motorDir))
                     else -> PLUGIN_TODO
                 }
             }
@@ -77,8 +82,8 @@ class SimulatedDevice(private var initialState: DeviceState) : Device {
                     is StreamAngle -> {
                         reportTimer.purge()
                         when (hostMessage.mode) {
-                            STREAM -> reportTimer.schedule(angleReportTask, 10000)
-                            SILENT -> {}
+                            stream -> reportTimer.schedule(angleReportTask, 10000)
+                            silent -> {}
                         }
                     }
                     is StorageSave -> initialState = deviceState
@@ -94,8 +99,10 @@ class SimulatedDevice(private var initialState: DeviceState) : Device {
                     is StepForwardCommand -> deviceState.move(hostMessage.step, forward)
                     is StepBackwardCommand -> deviceState.move(hostMessage.step, backward)
                     is MoveCommand -> deviceState.move(hostMessage.steps, deviceState.motorDir)
+                    else -> PLUGIN_TODO
                 }
             }
+            else -> PLUGIN_TODO
         }
     }
 
@@ -120,5 +127,7 @@ class SimulatedDevice(private var initialState: DeviceState) : Device {
         }
     }
 
-
+    companion object {
+        val logger = KotlinLogging.logger { }
+    }
 }

@@ -13,8 +13,8 @@ import com.github.ekohlwey.astrolabe.HostMessage.GetParameter.*
 import com.github.ekohlwey.astrolabe.HostMessage.ReadValue.*
 import com.github.ekohlwey.astrolabe.HostMessage.SetParameter.*
 import com.github.ekohlwey.astrolabe.PLUGIN_TODO
-import com.github.ekohlwey.astrolabe.StreamAngleMode.SILENT
-import com.github.ekohlwey.astrolabe.StreamAngleMode.STREAM
+import com.github.ekohlwey.astrolabe.StreamAngleMode.silent
+import com.github.ekohlwey.astrolabe.StreamAngleMode.stream
 import com.github.ekohlwey.astrolabe.devices.TSDevice.DeviceMessageType.*
 import com.github.ekohlwey.astrolabe.messages.*
 import com.github.ekohlwey.astrolabe.messages.Calibrate.calibrated
@@ -42,13 +42,10 @@ class TSDevice private constructor(
     override val messages = internalMessages.receiveAsFlow()
 
 
-    override fun writeHostMessages(hostMessages: Flow<HostMessage>): Job =
-        runBlocking {
-            launch {
-                val sequences = generateSequence((0u).toUByte()) { (it + 1u).toUByte() }.asFlow()
-                hostMessages.zip(sequences) { msg, seq -> writeMessage(msg, seq) }.collect {}
-            }
-        }
+    override suspend fun writeHostMessages(hostMessages: Flow<HostMessage>) {
+        val sequences = generateSequence((0u).toUByte()) { (it + 1u).toUByte() }.asFlow()
+        hostMessages.zip(sequences) { msg, seq -> writeMessage(msg, seq) }.collect {}
+    }
 
 
     override fun close() {
@@ -94,8 +91,8 @@ class TSDevice private constructor(
 
     private val StreamAngleMode.id: UByte
         get() = when (this) {
-            STREAM -> 1u
-            SILENT -> 0u
+            stream -> 1u
+            silent -> 0u
         }
 
     private val Direction.id: UByte
@@ -337,10 +334,8 @@ class TSDevice private constructor(
     }
 
     private suspend fun beginRead(): TSDevice {
-        withContext(Dispatchers.Default) {
-            launch {
-                readIncomingSerial(serialIn, 0u)
-            }
+        withContext(Dispatchers.IO) {
+            readIncomingSerial(serialIn, 0u)
         }
         return this
     }

@@ -8,5 +8,5 @@ import kotlinx.coroutines.flow.Flow
 interface Device : AutoCloseable {
     val messages: Flow<DeviceMessage>
 
-    fun writeHostMessages(hostMessages: Flow<HostMessage>) : Job
+    suspend fun writeHostMessages(hostMessages: Flow<HostMessage>)
 }

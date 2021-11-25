@@ -1,14 +1,12 @@
 package com.github.ekohlwey.astrolabe
 
-import com.github.ekohlwey.astrolabe.ListPorts
 import picocli.CommandLine
 import picocli.CommandLine.Command
 import picocli.CommandLine.Option
-import java.util.concurrent.Callable
 import kotlin.jvm.JvmStatic
 import kotlin.system.exitProcess
 
-@Command(name = "a7e", subcommands = [ListPorts::class, ConnectDevice::class], mixinStandardHelpOptions = true)
+@Command(name = "a7e", subcommands = [ListPorts::class, Connect::class], mixinStandardHelpOptions = true)
 object Astrolabe {
 
     object AllowedLoggingValues : Iterable<String> {
