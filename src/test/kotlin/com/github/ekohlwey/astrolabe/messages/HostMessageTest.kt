@@ -1,12 +1,14 @@
 package com.github.ekohlwey.astrolabe.messages
 
 import com.github.ekohlwey.astrolabe.*
+import com.github.ekohlwey.astrolabe.Direction.*
 import com.github.ekohlwey.astrolabe.HostMessage.Command.*
 import com.github.ekohlwey.astrolabe.HostMessage.GetParameter.*
 import com.github.ekohlwey.astrolabe.HostMessage.ReadValue.*
 import com.github.ekohlwey.astrolabe.HostMessage.SetParameter.*
 import com.github.ekohlwey.astrolabe.HostMessage.SuccessfulParse
 import com.github.ekohlwey.astrolabe.StreamAngleMode.*
+import com.github.h0tk3y.betterParse.combinators.*
 import io.kotest.core.spec.style.StringSpec
 import io.kotest.data.forAll
 import io.kotest.data.headers
@@ -55,8 +57,8 @@ class HostMessageTest : StringSpec({
             row("set param step_size = 16", SetStepSize(MicroSteps(16u))),
             row("set param enable = false", SetEnable(EnableMode.disabled)),
             row("set param enable = true", SetEnable(EnableMode.enabled)),
-            row("set param direction = forward", SetMotorDir(Direction.forward)),
-            row("set param direction = backward", SetMotorDir(Direction.backward))
+            row("set param direction = forward", SetMotorDir(forward)),
+            row("set param direction = backward", SetMotorDir(backward))
         ).forAll { input, output ->
             HostMessage.tryParseToEnd(input) shouldBe SuccessfulParse(output)
         }
@@ -75,4 +77,34 @@ class HostMessageTest : StringSpec({
             HostMessage.tryParseToEnd(input) shouldBe SuccessfulParse(output)
         }
     }
+
+    "Parses movement commands" {
+        table(
+            headers("input", "output"),
+            row("step", Step(forward)),
+            row("step forward", Step(forward)),
+            row("step backward", Step(backward)),
+            row("step forward current = 10", StepForwardCommand(Steps.default, Current(10u))),
+            row("step forward steps = 10", StepForwardCommand(Steps(10u), Current.default)),
+            row("step forward steps = 100 current = 100", StepForwardCommand(Steps(100u), Current(100u))),
+            row("step forward steps = 100 steps = 200", StepForwardCommand(Steps(200u), Current.default)),
+            row("step backward steps = 100 current = 100", StepBackwardCommand(Steps(100u), Current(100u))),
+            row("move steps = 10 forward", MoveCommand(Steps(10u), forward)),
+            row("move backward", MoveCommand(Steps.default, backward)),
+            row("move", MoveCommand(Steps.default, Direction.default))
+        ).forAll { input, output ->
+            HostMessage.tryParseToEnd(input) shouldBe SuccessfulParse(output)
+        }
+    }
+
+    "Parses non-movement commands" {
+        table(
+            headers("input", "output"),
+            row("restart", JumpBootloader),
+            row("save", StorageSave)
+        ).forAll { input, output ->
+            HostMessage.tryParseToEnd(input) shouldBe SuccessfulParse(output)
+        }
+    }
+
 })
