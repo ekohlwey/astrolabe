@@ -8,8 +8,8 @@ plugins {
     id("com.github.johnrengelman.shadow") version "7.1.0"
 }
 
-group="com.github.ekohlwey.astrolabe"
-version="1.0.0"
+group = "com.github.ekohlwey.astrolabe"
+version = "1.0.0"
 
 repositories {
     mavenCentral()
@@ -29,18 +29,20 @@ dependencies {
     implementation("org.slf4j:slf4j-simple:1.7.32")
     //implementation("com.diogonunes:JColor:5.2.0")
     implementation("com.github.h0tk3y.betterParse:better-parse:0.4.3")
-    implementation ("io.github.microutils:kotlin-logging-jvm:2.0.11")
+    implementation("io.github.microutils:kotlin-logging-jvm:2.0.11")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0-RC")
-    implementation("org.fusesource.jansi:jansi:2.4.0")
+//    implementation("org.fusesource.jansi:jansi:2.4.0")
+    implementation("org.jline:jline:3.21.0")
+    implementation("org.jline:jline-terminal-jansi:3.21.0")
     compileOnly("org.graalvm.nativeimage:svm:21.2.0")
     annotationProcessor("info.picocli:picocli-codegen:4.6.2")
     annotationProcessor("org.graalvm.nativeimage:svm:21.2.0")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.8.1")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.8.1")
     testImplementation(kotlin("test"))
-    testImplementation ("io.kotest:kotest-runner-junit5:5.0.0.RC2")
-    testImplementation ("io.kotest:kotest-assertions-core:5.0.0.RC2")
-    testImplementation ("io.kotest:kotest-property:5.0.0.RC2")
+    testImplementation("io.kotest:kotest-runner-junit5:5.0.0.RC2")
+    testImplementation("io.kotest:kotest-assertions-core:5.0.0.RC2")
+    testImplementation("io.kotest:kotest-property:5.0.0.RC2")
 }
 
 tasks.test {

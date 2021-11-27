@@ -88,7 +88,10 @@ class HostMessageTest : StringSpec({
             row("step forward steps = 10", StepForwardCommand(Steps(10u), Current.default)),
             row("step forward steps = 100 current = 100", StepForwardCommand(Steps(100u), Current(100u))),
             row("step forward steps = 100 steps = 200", StepForwardCommand(Steps(200u), Current.default)),
+            row("step backward current = 10", StepBackwardCommand(Steps.default, Current(10u))),
+            row("step backward steps = 10", StepBackwardCommand(Steps(10u), Current.default)),
             row("step backward steps = 100 current = 100", StepBackwardCommand(Steps(100u), Current(100u))),
+            row("step backward steps = 100 steps = 200", StepBackwardCommand(Steps(200u), Current.default)),
             row("move steps = 10 forward", MoveCommand(Steps(10u), forward)),
             row("move backward", MoveCommand(Steps.default, backward)),
             row("move", MoveCommand(Steps.default, Direction.default))

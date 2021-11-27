@@ -17,6 +17,16 @@ Create a precompiled native image:
 ./gradlew nativeImage
 ```
 
+# Connecting
+
+## Simulated Device Mode
+
+This is included for exploration and testing purposes.
+
+```
+a7e connect [-d <device type>]
+```
+
 ## Maintaining the Native Image Config
 
 The native image is generated using Graal, which analyzes the Java code to make it more compact and performant. In order

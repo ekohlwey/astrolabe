@@ -13,25 +13,15 @@ import com.github.h0tk3y.betterParse.grammar.Grammar
 import com.github.h0tk3y.betterParse.grammar.tryParseToEnd
 import com.github.h0tk3y.betterParse.lexer.*
 import com.github.h0tk3y.betterParse.parser.*
-import java.io.PrintStream
 
+
+typealias ErrorMapper = (ErrorResult) -> ErrorResult
 
 sealed class HostMessage {
 
     sealed class HostMessageParse
 
-    data class HostMessageParseError(private val errorResult: ErrorResult) : HostMessageParse() {
-        fun printHelp(consoleOut: PrintStream) {
-            when (errorResult) {
-//                is BadGetName -> consoleOut.printBadGetHelp(errorResult)
-                else -> {
-                    consoleOut.appendLine(errorResult.toString())
-                }
-            }
-            consoleOut.flush()
-        }
-
-    }
+    data class HostMessageParseError(private val errorResult: ErrorResult) : HostMessageParse()
 
     data class SuccessfulParse(val hostMessage: HostMessage) : HostMessageParse()
 
@@ -44,7 +34,8 @@ sealed class HostMessage {
             }
         }
 
-        private class MapErrorCombinator<R>(val delegate: Parser<R>, val mapper: (ErrorResult) -> ErrorResult) :
+
+        private class MapErrorCombinator<R>(val delegate: Parser<R>, val mapper: ErrorMapper) :
             Parser<R> {
             override fun tryParse(tokens: TokenMatchesSequence, fromPosition: Int): ParseResult<R> =
                 when (val parseResult = delegate.tryParse(tokens, fromPosition)) {
@@ -53,23 +44,71 @@ sealed class HostMessage {
                 }
         }
 
-        private infix fun <R> Parser<R>.mapError(mapper: (ErrorResult) -> ErrorResult): Parser<R> =
+        private infix fun <R> Parser<R>.mapError(mapper: ErrorMapper): Parser<R> =
             MapErrorCombinator(this@mapError, mapper)
 
-        private data class ExpectedToken(val token: Token, val source: ErrorResult) : ErrorResult()
+        internal data class ExpectedToken(val token: Token, val source: ErrorResult) : ErrorResult() {
+            internal val mismatchText: String?
+                get() = (this.source as? NoMatchingToken)?.tokenMismatch?.text
+                    ?: (this.source as? MismatchedToken)?.found?.text
+        }
+
+
+        private val Token.completionCandidates: List<String>
+            get() = (this as? LiteralToken)?.let { listOf(it.text) } ?: emptyList()
+
+        internal val ErrorResult.completionCandidates: List<String>
+            get() = when (this) {
+                is ExpectedToken -> {
+                    if (this.source is UnexpectedEof || this.token.startsWith(this.mismatchText)) {
+                        this.token.completionCandidates
+                    } else {
+                        emptyList()
+                    }
+                }
+                is OneExpected -> this.failedOptions.flatMap { it.completionCandidates }
+                is AlternativesFailure -> this.errors.flatMap { it.completionCandidates }
+                is UnparsedRemainder -> emptyList()
+                is NoMatchingToken -> emptyList()
+                is MismatchedToken -> if (this.expected.startsWith(this.found.text)) {
+                    this.expected.completionCandidates
+                } else {
+                    emptyList()
+                }
+                is UnexpectedEof -> emptyList()
+                else -> emptyList()
+            }
+
+
+        private fun Token.startsWith(candidate: String?): Boolean {
+            return (this as? LiteralToken)?.text?.startsWith(candidate ?: return false) ?: false
+        }
+
+//        private operator fun <T> Parser<T>.unaryPlus(): Parser<T> =
+//            this.mapError {
+//
+//            }
 
         private operator fun Token.unaryPlus(): Parser<TokenMatch> =
-            this.mapError { e: ErrorResult -> ExpectedToken(this@unaryPlus, e) }
+            this.mapError { ExpectedToken(this@unaryPlus, it) }
 
-        private data class OneExpected(val failedOptions: List<ExpectedToken>) : ErrorResult()
+
+        internal data class OneExpected(val failedOptions: List<ExpectedToken>) : ErrorResult()
 
         private operator fun <T> Parser<T>.not(): Parser<T> = this.mapError { e ->
-            if (e is AlternativesFailure && e.errors.all { it is ExpectedToken })
-                OneExpected(e.errors.map { it as ExpectedToken })
-            else if (e is AlternativesFailure && e.errors.any { it is OneExpected })
-                e.errors.find { it is OneExpected }!!
-            else
+            if (e is AlternativesFailure) {
+                if(e.errors.all { it is ExpectedToken }) {
+                    OneExpected(
+                        e.errors.map { it as ExpectedToken }
+                    )
+                } else if (e.errors.any { it is OneExpected }) {
+                    e.errors.find { it is OneExpected }!!
+                } else {
+                    e
+                }
+            }  else {
                 e
+            }
         }
 
         val grammar = object : Grammar<HostMessage>() {
@@ -107,6 +146,7 @@ sealed class HostMessage {
             val openLoop by literalTokenWithSameName("open_loop")
             val stream by literalTokenWithSameName("stream")
             val silent by literalTokenWithSameName("silent")
+
             @Suppress("unused")
             val ws by regexToken("<space>", "\\s*", ignore = true)
 
@@ -143,27 +183,23 @@ sealed class HostMessage {
 
             // start commands
             // start "setters"
-            val setParam by -param and !(
-                    (-+calibrate and calAssignment map { SetCalibrate(it) }) or
-                            (-+kd and pidAssignment map { SetPidKd(it) }) or
-                            (-+ki and pidAssignment map { SetPidKi(it) }) or
-                            (-+kp and pidAssignment map { SetPidKp(it) }) or
-                            (-+current and currentAssignment map { SetCurrent(it) }) or
-                            (-+stepSize and stepAssignment map { SetStepSize(it) }) or
-                            (-+enable and enableAssignment map { SetEnable(it) }) or
-                            (-+direction and dirAssignment map { SetMotorDir(it) })
-                    )
-            val setMode by -+mode and !(
-                    (+enabled map { ModeEnable }) or
-                            (+disabled map { ModeDisable }) or
-                            (+closedLoop map { ModeCloseloop }) or
-                            (+openLoop map { ModeOpenloop })
-                    )
-            val setStreamAngle by -+mode and !(
-                    (+stream map { StreamAngleMode.stream }) or
-                            (+silent map { StreamAngleMode.silent })
-                    ) map { StreamAngle(it) }
-            val setter by -+set and !(setParam or setMode or setStreamAngle)
+            val setParamCandidate by !(-+calibrate and calAssignment map { SetCalibrate(it) }) or
+                    !(-+kd and pidAssignment map { SetPidKd(it) }) or
+                    !(-+ki and pidAssignment map { SetPidKi(it) }) or
+                    !(-+kp and pidAssignment map { SetPidKp(it) }) or
+                    !(-+current and currentAssignment map { SetCurrent(it) }) or
+                    !(-+stepSize and stepAssignment map { SetStepSize(it) }) or
+                    !(-+enable and enableAssignment map { SetEnable(it) }) or
+                    !(-+direction and dirAssignment map { SetMotorDir(it) })
+            val setParam by -+param and !setParamCandidate
+            val setModeCandidate = (+enabled map { ModeEnable }) or
+                    (+disabled map { ModeDisable }) or
+                    (+closedLoop map { ModeCloseloop }) or
+                    (+openLoop map { ModeOpenloop }) or
+                    (+stream map { StreamAngle(StreamAngleMode.stream) }) or
+                    (+silent map { StreamAngle(StreamAngleMode.silent) })
+            val setMode by -+mode and !setModeCandidate
+            val setter by -+set and !(setParam or setMode)
             // end setters
 
             // start getters
@@ -190,13 +226,14 @@ sealed class HostMessage {
             val numSteps by -+steps and -+eq and unsignedInt map { Steps(it) }
             val currentAmount by -+current and -+eq and unsignedInt map { Current(it) }
             val dirStepArg by !(numSteps or currentAmount)
-            val doStepForward by -+step and -+forwardDir and oneOrMore(dirStepArg) map {
+            val doStepForward by -+forwardDir and oneOrMore(dirStepArg) map {
                 StepForwardCommand(Steps.findLastOrDefault(it), Current.findLastOrDefault(it))
             }
-            val doStepBackward by -+step and -+backwardDir and oneOrMore(dirStepArg) map {
+            val doStepBackward by -+backwardDir and oneOrMore(dirStepArg) map {
                 StepBackwardCommand(Steps.findLastOrDefault(it), Current.findLastOrDefault(it))
             }
-            val doStep by -+step and optional(directionValue) map { Step(it ?: Direction.forward) }
+            val plainStep by optional(directionValue) map { Step(it ?: Direction.forward) }
+            val doStep by -+step and !(doStepForward or doStepBackward or plainStep)
             val moveArg by !(numSteps or directionValue)
             val doMove by -+move and zeroOrMore(moveArg) map {
                 MoveCommand(Steps.findLastOrDefault(it), Direction.findLastOrDefault(it))
@@ -206,18 +243,12 @@ sealed class HostMessage {
             val doSave by +save map { StorageSave }
             val doJumpBootloader by +restart map { JumpBootloader }
 
-            val command by !(setMode or
-                    setStreamAngle or
-                    doStepForward or
-                    doStepBackward or
+            override val rootParser by !(setter or
+                    getter or
                     doStep or
                     doMove or
                     doSave or
                     doJumpBootloader)
-
-            override val rootParser by !(setter or
-                    getter or
-                    command)
 
         }
     }
