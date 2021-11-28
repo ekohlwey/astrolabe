@@ -28,9 +28,13 @@ import org.jline.reader.Parser
 import org.jline.reader.Parser.ParseContext.ACCEPT_LINE
 import org.jline.reader.Parser.ParseContext.COMPLETE
 import org.jline.terminal.Terminal
+import org.jline.terminal.Terminal.Signal
+import org.jline.terminal.Terminal.Signal.INT
+import org.jline.terminal.Terminal.Signal.QUIT
 import org.jline.terminal.TerminalBuilder
 import org.jline.utils.InfoCmp
 import org.jline.utils.InfoCmp.*
+import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PrintWriter
@@ -76,8 +80,8 @@ class Console(private val consoleIn: InputStream, private val consoleOut: Output
             val result = HostMessage.grammar.tryParseToEnd(matches, 0)
             if (result is Parsed<HostMessage> || context == COMPLETE) {
                 val word = matches.lastOrNull()
-                val lastNonIgnored = matches.filter { ! it.type.ignored }.lastOrNull()
-                val extraCandidates = if(word != lastNonIgnored) {
+                val lastNonIgnored = matches.filter { !it.type.ignored }.lastOrNull()
+                val extraCandidates = if (word != lastNonIgnored) {
                     when (lastNonIgnored?.text) {
                         "move" -> listOf(" steps =", " ${forward.name}", " ${backward.name}")
                         "step" -> listOf(" steps =", " ${forward.name}", " ${backward.name}", " current =")
@@ -86,15 +90,15 @@ class Console(private val consoleIn: InputStream, private val consoleOut: Output
                 } else {
                     emptyList()
                 }
-                val line =  AstrolabeLine(
+                val line = AstrolabeLine(
                     word?.text ?: "",
-                    cursor - (word?.offset ?:0),
-                    (word?.tokenIndex)?:0,
+                    cursor - (word?.offset ?: 0),
+                    (word?.tokenIndex) ?: 0,
                     matches.map { it.text }.toList(),
                     line,
                     cursor,
                     word?.length ?: 0,
-                    word?.length ?:0,
+                    word?.length ?: 0,
                     ((result as? ErrorResult)?.completionCandidates ?: emptyList()) + extraCandidates
                 )
                 logger.trace { line }
@@ -183,6 +187,8 @@ class Console(private val consoleIn: InputStream, private val consoleOut: Output
                         consoleOut
                     ) else it.system(true)
                 }
+                .nativeSignals(true)
+                .signalHandler { runBlocking { handleSignal(it) } }
                 .let { doIo { it.build() } ?: throw IllegalStateException("Unable to open terminal") }
 
         reader = LineReaderBuilder.builder()
@@ -197,10 +203,41 @@ class Console(private val consoleIn: InputStream, private val consoleOut: Output
                 internalErrors.receiveAsFlow().collect { writeConsoleError(it) }
             }
             while (true) {
-                val line = doIo { reader!!.readLine(" > ") }
-                handleUserInput(line ?: break)
+                val result = withContext(Dispatchers.IO) { runCatching { reader?.readLine(" > ") ?: "" } }
+                when (val exception = result.exceptionOrNull()) {
+                    is InterruptedException, is UserInterruptException -> continue
+                    is EOFException, is EndOfFileException -> {
+                        close()
+                        break
+                    }
+                    null -> {
+                        /* no exception - get and assert the value below*/
+                    }
+                    else -> {
+                        logger.info(exception) { "Exception while reading next line" }
+                        close()
+                        break
+                    }
+                }
+                val line = result.getOrThrow()
+                if (line.trim().equals("")) {
+                    continue
+                }
+                handleUserInput(line)
             }
         }
+    }
+
+    private suspend fun handleSignal(signal: Signal) {
+        when (signal) {
+            INT -> handleCtlC()
+            QUIT -> close()
+        }
+    }
+
+    private suspend fun handleCtlC() {
+        reader?.callWidget(LineReader.FRESH_LINE)
+//        aboveLine { /* do nothing - just redraw the prompt */ }
     }
 
     private suspend fun writeConsoleError(errorResult: ErrorResult) {
@@ -255,6 +292,8 @@ class Console(private val consoleIn: InputStream, private val consoleOut: Output
         if (consoleIn != System.`in`) consoleIn.close()
         if (consoleOut != System.out) consoleOut.close()
         terminal?.close()
+        internalErrors.close()
+        sentMessages.close()
     }
 
     suspend fun writeDeviceMessages(messages: Flow<DeviceMessage>) {

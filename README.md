@@ -27,6 +27,8 @@ This is included for exploration and testing purposes.
 a7e connect [-d <device type>]
 ```
 
+# Developing
+
 ## Maintaining the Native Image Config
 
 The native image is generated using Graal, which analyzes the Java code to make it more compact and performant. In order
@@ -57,4 +59,12 @@ automatically based on application execution though. To do so:
    you change Graal versions.
 4. Review the proposed changes to make sure they make sense before merging them with the source.
 
+## Debugging the Console
 
+The console doesn't run properly in the IntelliJ IDE Launch terminal and perhaps other terminals. To launch a version
+that can be connected to using remote debugging, run:
+
+```
+./gradlew shadowJar && java '-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005' \
+-jar build/libs/astrolabe-11-all.jar -v TRACE connect -d simulated
+```

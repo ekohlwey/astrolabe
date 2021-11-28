@@ -38,6 +38,7 @@ class SimulatedDevice(private var initialState: DeviceState) : Device {
     }
 
     override fun close() {
+        internalMessages.close()
         reportTimer.cancel()
     }
 
@@ -82,7 +83,7 @@ class SimulatedDevice(private var initialState: DeviceState) : Device {
                     is StreamAngle -> {
                         reportTimer.purge()
                         when (hostMessage.mode) {
-                            stream -> reportTimer.schedule(angleReportTask, 10000)
+                            stream -> reportTimer.schedule(angleReportTask, 1000)
                             silent -> {}
                         }
                     }
