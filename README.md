@@ -39,16 +39,7 @@ These configurations can be difficult to create by hand. Graal includes instrume
 automatically based on application execution though. To do so:
 
 1. Ensure you have Graal installed
-   - on OSX
-     ```bash
-     brew install --cask graalvm/tap/graalvm-ce-lts-java11 && \
-     sudo xattr -r -d com.apple.quarantine /Library/Java/JavaVirtualMachines/graalvm-ce-*
-     ```
-     Then find your Graal installation, lets call this `$GRAAL_HOME`, and run
-     ```bash
-     ${GRAAL_HOME}/bin/gu install native-image
-     ```
-   You will need to ensure that the Graal version referenced in the gradle file matches the version you have installed.
+   - On OSX, run `./install-graal.sh`
 2. Create a shadow jar using the commands in the above section
 3. Run the jar with instrumentation. This will update the image config.
    ```bash
