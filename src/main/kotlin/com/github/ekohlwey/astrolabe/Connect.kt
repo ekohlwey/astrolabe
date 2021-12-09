@@ -1,9 +1,13 @@
 package com.github.ekohlwey.astrolabe
 
+import com.fazecast.jSerialComm.SerialPort
 import com.github.ekohlwey.astrolabe.Connect.PossibleDevice.simulated
+import com.github.ekohlwey.astrolabe.Connect.PossibleDevice.truestep
 import com.github.ekohlwey.astrolabe.devices.Console
+import com.github.ekohlwey.astrolabe.devices.Device
 import com.github.ekohlwey.astrolabe.devices.SimulatedDevice
 import com.github.ekohlwey.astrolabe.devices.SimulatedDevice.DeviceState
+import com.github.ekohlwey.astrolabe.devices.TrueStepDevice
 import kotlinx.coroutines.*
 import mu.KotlinLogging
 import picocli.CommandLine
@@ -29,18 +33,35 @@ class Connect : Callable<Int> {
     )
     var device: PossibleDevice? = null
 
+    @CommandLine.Option(
+        description = ["The port to connect to."],
+        names = ["-p", "--port"]
+    )
+    var port: String? = null
+
     override fun call(): Int = runBlocking { doConnect() }
 
-
     private suspend fun doConnect(): Int {
-        if (device == simulated) {
-            return SimulatedDevice(DeviceState()).use { device -> connectToConsole(device) }
-        } else {
-            TODO("Unimplemented")
+        when (device!!) {
+            simulated -> return SimulatedDevice(DeviceState()).use { connectToConsole(it) }
+            truestep -> {
+                if (port == null) {
+                    println("Must supply a port when using truestep device.")
+                    return 1
+                }
+                return TrueStepDevice.open(port!!).use {
+                    if (it != null) {
+                        connectToConsole(it)
+                    } else {
+                        println("Unable to open port ${port}")
+                        1
+                    }
+                }
+            }
         }
     }
 
-    private suspend fun connectToConsole(device: SimulatedDevice): Int {
+    private suspend fun connectToConsole(device: Device): Int {
         return Console(System.`in`, System.out).use { console ->
             withContext(Dispatchers.Default) {
                 kotlin.runCatching {

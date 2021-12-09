@@ -15,7 +15,7 @@ import com.github.ekohlwey.astrolabe.HostMessage.SetParameter.*
 import com.github.ekohlwey.astrolabe.PLUGIN_TODO
 import com.github.ekohlwey.astrolabe.StreamAngleMode.silent
 import com.github.ekohlwey.astrolabe.StreamAngleMode.stream
-import com.github.ekohlwey.astrolabe.devices.TSDevice.DeviceMessageType.*
+import com.github.ekohlwey.astrolabe.devices.TrueStepDevice.DeviceMessageType.*
 import com.github.ekohlwey.astrolabe.messages.*
 import com.github.ekohlwey.astrolabe.messages.Calibrate.calibrated
 import com.github.ekohlwey.astrolabe.messages.Calibrate.uncalibrated
@@ -32,7 +32,7 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 
 
-class TSDevice private constructor(
+class TrueStepDevice private constructor(
     private val serialIn: InputStream,
     private val serialOut: OutputStream
 ) : Device {
@@ -322,10 +322,10 @@ class TSDevice private constructor(
     }
 
     companion object {
-        suspend fun open(portName: String): TSDevice? {
+        suspend fun open(portName: String): TrueStepDevice? {
             return try {
                 val port = SerialPort.getCommPort(portName)
-                val device = TSDevice(port.inputStream, port.outputStream)
+                val device = TrueStepDevice(port.inputStream, port.outputStream)
                 device.beginRead()
             } catch (e: SerialPortInvalidPortException) {
                 null
@@ -333,7 +333,7 @@ class TSDevice private constructor(
         }
     }
 
-    private suspend fun beginRead(): TSDevice {
+    private suspend fun beginRead(): TrueStepDevice {
         withContext(Dispatchers.IO) {
             readIncomingSerial(serialIn, 0u)
         }
